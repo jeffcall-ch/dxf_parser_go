@@ -1,32 +1,33 @@
-# DXF Text Parser Development Prompt
-## ObjectiveCreate a high-performance Go program that extracts text content and coordinates from DXF files. The parser should be optimized for speed and handle 12MB+ files efficiently.
-## Requirements
-### Core Functionality- Extract all text entities (TEXT and MTEXT) from DXF files- Capture text content and X,Y coordinates for each entity- Return structured data that enables spatial analysis- Process files up to 12MB in under 2 seconds- Utilize 8 CPU cores through Go's concurrency features
-### Technical Specifications
-#### Input Processing- Read DXF files in standard ASCII format- Handle both TEXT and MTEXT entity types- Parse DXF group codes relevant to text extraction:  - Group code 0: Entity type identifier  - Group code 1: Primary text content  - Group code 3: Additional text content (for MTEXT)  - Group code 10: X coordinate  - Group code 20: Y coordinate  - Group code 40: Text height (optional for sizing context)
-#### Output StructureCreate a struct that includes:- Text content (combined from multiple group code 1 and 3 entries if needed)- X coordinate (float64)- Y coordinate (float64)- Text height (optional)- Entity type (TEXT vs MTEXT)
-#### Performance Requirements- Use goroutines to process file sections concurrently- Implement efficient memory usage (avoid loading entire file into memory)- Stream processing where possible- Target sub-second processing for 12MB files
-### Code Structure
-#### Main Components Needed1. **File Reader**: Concurrent file processing2. **DXF Parser**: Extract relevant group codes3. **Text Extractor**: Combine text fragments and coordinates4. **Spatial Analyzer**: Enable position-based queries5. **Test Suite**: Validate against provided sample files
-#### Concurrent Architecture- Split file processing across available CPU cores- Use channels for inter-goroutine communication- Implement proper error handling and resource cleanup- Ensure thread-safe result aggregation
-### Additional Features
-#### Spatial Analysis Functions- Find text entities within specified coordinate ranges- Calculate relative positions between text elements- Support queries like "find all text in top-right quadrant relative to reference string"- Distance calculations between text entities
-#### Error Handling- Graceful handling of malformed DXF files- Clear error messages for parsing failures- Validation of coordinate data- File access error management
-### Testing Requirements
-#### Test Coverage- Parse provided sample DXF files- Verify extracted text content accuracy- Validate coordinate precision- Measure parsing performance- Test concurrent processing under load
-#### Benchmarking- Time parsing operations for different file sizes- Memory usage profiling- CPU utilization measurement- Comparison with single-threaded performance
-### Code Quality Standards
-#### Best Practices- Follow Go idioms and conventions- Include comprehensive error handling- Add meaningful comments for complex parsing logic- Use appropriate data structures for performance- Implement clean API design
-#### Documentation- Function documentation with examples- Usage instructions- Performance characteristics explanation- Sample code for common use cases
-## Deliverables
-### Primary Code1. Complete Go parser with concurrent processing2. Spatial analysis helper functions3. Command-line interface for testing4. Benchmark suite for performance validation
-### Supporting Materials1. Usage documentation with examples2. Performance analysis results3. Comparison with Python parsing speeds4. Recommendations for further optimization
-## Testing Protocol
-### File Processing Tests- Process all provided sample files- Extract and display first 10 text entities with coordinates- Verify no text entities are missed- Confirm coordinate accuracy against known positions
-### Performance Validation- Measure parsing time for each sample file- Test with different numbers of goroutines (1, 2, 4, 8)- Profile memory usage during parsing- Generate performance comparison report
-### Spatial Query Testing- Implement sample spatial queries using extracted data- Test relative positioning calculations- Validate "find text near reference" functionality
+# Python to Go DXF Parser Migration Prompt
+## ObjectiveYou have successfully created a high-performance Go DXF parser that extracts text and coordinates. Now I need you to migrate my existing Python DXF processing logic to use your Go parser while maintaining identical functionality and output format.
+
+Link to python file: C:\Users\szil\Repos\dxf_parser_go\dxf_iso_bom_extraction.py
+
+## Context
+### What You've Already Built- A working Go DXF parser that extracts text content and coordinates- Concurrent processing capabilities using goroutines- Spatial analysis functions for position-based queries- Performance optimizations for large file processing
+### What I Need NowReplicate my existing Python workflow using your Go parser, ensuring identical output format and business logic while gaining the performance benefits of Go.
+## My Current Python Implementation
+### Python Code Analysis RequiredI will provide my complete Python code that includes:- DXF file processing logic- Text extraction and filtering- Coordinate analysis and spatial calculations- Output formatting and data structures- Any business-specific logic or transformations
+### Key Areas to Analyze1. **Input Processing**: How my Python code opens and processes DXF files2. **Text Filtering**: Any specific text filtering or validation logic3. **Spatial Logic**: How I determine positions, relationships, and reference points4. **Data Transformations**: Any calculations or modifications applied to extracted data5. **Output Format**: Exact structure and format of results6. **Error Handling**: How edge cases and errors are managed
+## Migration Requirements
+### Functional Equivalence- **Identical Output**: Go version must produce exactly the same results as Python version- **Same Data Structure**: Maintain identical output format (JSON, CSV, or custom structure)- **Business Logic Preservation**: All filtering, calculations, and transformations must be replicated- **Edge Case Handling**: Replicate error handling and boundary condition behavior
+### Performance Integration- **Leverage Go Parser**: Use your existing Go DXF parser as the foundation- **Maintain Concurrency**: Keep the performance benefits of goroutine-based processing- **Optimize Hot Paths**: Identify and optimize the most performance-critical sections- **Memory Efficiency**: Ensure large file processing doesn't consume excessive memory
+### Code Structure Requirements
+#### Main Application Flow1. **File Input**: Handle command-line arguments or file paths exactly like Python version2. **DXF Parsing**: Use your Go parser to extract text and coordinates3. **Business Logic**: Apply the same filtering, calculations, and transformations4. **Output Generation**: Produce identical output format and structure5. **Error Reporting**: Match Python error messages and handling behavior
+#### Integration Points- **Parser Interface**: Clean integration between your Go parser and business logic- **Data Flow**: Efficient data passing between parsing and processing stages- **Configuration**: Handle any configuration parameters or options from Python version- **Logging**: Match logging level and format if present in Python code
+## Specific Implementation Tasks
+### Code Analysis Phase1. **Trace Python Execution**: Understand the complete workflow from input to output2. **Identify Dependencies**: Note any Python libraries or functions used3. **Document Business Rules**: Extract and document all business logic4. **Map Data Transformations**: Understand how raw DXF data becomes final output
+### Go Implementation Phase1. **Integrate Your Parser**: Use your existing Go DXF parser as the data source2. **Replicate Logic**: Implement identical business logic in Go3. **Match Output Format**: Ensure output structure exactly matches Python version4. **Optimize Performance**: Leverage Go's concurrency for business logic processing
+### Validation Phase1. **Output Comparison**: Process same files with both versions and compare results2. **Edge Case Testing**: Verify identical behavior on problematic inputs3. **Performance Measurement**: Document speed improvements achieved4. **Regression Testing**: Ensure no functionality is lost in migration
+## Deliverables Required
+### Primary Code1. **Complete Go Application**: Fully functional replacement for Python code2. **Integration Documentation**: How your parser integrates with business logic3. **Migration Notes**: Key differences and decisions made during migration4. **Performance Comparison**: Before/after timing and resource usage
+### Supporting Materials1. **Usage Instructions**: Command-line interface and options2. **Output Format Documentation**: Specification of result structure3. **Test Results**: Validation against original Python output4. **Optimization Report**: Performance improvements and bottlenecks identified
 ## Success Criteria
-- Parser completes 12MB file processing in under 2 seconds- Extracts 100% of text entities without errors- Concurrent processing shows measurable speedup over single-threaded- Spatial queries return accurate position-based results- Code follows Go best practices and is maintainable
-## Notes for Implementation
-- DXF format uses paired lines (group code followed by value)- TEXT entities may span multiple lines for longer content- Coordinate system origin and scaling may vary between files- Consider using `bufio.Scanner` for efficient line-by-line processing- Implement graceful degradation if concurrent processing encounters issues
-Please provide complete, production-ready code with proper error handling, documentation, and test examples. Include both single-threaded and concurrent versions for performance comparison.
+### Functional Success- **Identical Results**: Go version produces exactly the same output as Python version- **Complete Feature Parity**: All Python functionality replicated in Go- **Robust Error Handling**: Matches Python error behavior and messages- **Same User Interface**: Command-line usage remains unchanged
+### Performance Success- **Significant Speedup**: Minimum 3x improvement over Python version- **Scalable Concurrency**: Effective use of available CPU cores- **Memory Efficiency**: Handles large files without excessive memory usage- **Consistent Performance**: Reliable timing across different file sizes
+## Implementation Notes
+### Python Code Review Process1. **Line-by-Line Analysis**: Understand every function and operation2. **Data Flow Mapping**: Trace data transformations from input to output3. **Business Rule Extraction**: Document all filtering and calculation logic4. **Output Format Specification**: Define exact structure requirements
+### Go Migration Strategy1. **Leverage Existing Parser**: Build upon your working DXF parser2. **Incremental Development**: Implement and test one component at a time3. **Validation at Each Step**: Compare intermediate results with Python version4. **Performance Monitoring**: Track performance improvements during development
+### Quality Assurance1. **Comprehensive Testing**: Test with all available sample files2. **Regression Prevention**: Ensure no features are lost or changed3. **Performance Validation**: Confirm speed improvements meet expectations4. **Documentation Accuracy**: Ensure instructions match actual implementation
+## Next Steps1. **Share Python Code**: I will provide my complete Python implementation2. **Review and Plan**: Analyze the Python code and plan the Go migration3. **Implement Migration**: Build the Go version using your existing parser4. **Validate and Optimize**: Test for correctness and optimize for performance5. **Document Results**: Provide complete migration documentation and performance analysis
+Please confirm you understand these requirements and are ready to analyze my Python code for migration to your Go DXF parser solution.

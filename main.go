@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -19,6 +20,28 @@ type TextEntity struct {
 	Height     float64 `json:"height,omitempty"`
 	EntityType string  `json:"entity_type"`
 	Layer      string  `json:"layer,omitempty"`
+}
+
+// decodeUnicode decodes Unicode escape sequences like \U+00B0 to actual Unicode characters
+func decodeUnicode(text string) string {
+	// Regex to match \U+xxxx patterns
+	re := regexp.MustCompile(`\\U\+([0-9A-Fa-f]{4})`)
+	
+	result := re.ReplaceAllStringFunc(text, func(match string) string {
+		// Extract the hex code (remove \U+)
+		hexCode := match[3:]
+		
+		// Parse the hex code to integer
+		if codePoint, err := strconv.ParseInt(hexCode, 16, 32); err == nil {
+			// Convert to Unicode character
+			return string(rune(codePoint))
+		}
+		
+		// If parsing fails, return original
+		return match
+	})
+	
+	return result
 }
 
 // DXFParser handles parsing of DXF files
@@ -89,10 +112,11 @@ func (p *DXFParser) parseSequential(file *os.File) ([]TextEntity, error) {
 			} else if inTextEntity {
 				switch lastGroupCode {
 				case "1", "3": // Text content
+					decodedLine := decodeUnicode(line)
 					if currentEntity.Content == "" {
-						currentEntity.Content = line
+						currentEntity.Content = decodedLine
 					} else {
-						currentEntity.Content += line
+						currentEntity.Content += decodedLine
 					}
 				case "8": // Layer
 					currentEntity.Layer = line
@@ -279,10 +303,11 @@ func (p *DXFParser) parseChunk(file *os.File, start, end int64) ([]TextEntity, e
 			} else if inTextEntity {
 				switch lastGroupCode {
 				case "1", "3": // Text content
+					decodedLine := decodeUnicode(line)
 					if currentEntity.Content == "" {
-						currentEntity.Content = line
+						currentEntity.Content = decodedLine
 					} else {
-						currentEntity.Content += line
+						currentEntity.Content += decodedLine
 					}
 				case "8": // Layer
 					currentEntity.Layer = line
@@ -318,5 +343,12 @@ func (p *DXFParser) parseChunk(file *os.File, start, end int64) ([]TextEntity, e
 }
 
 func main() {
-	runCLI()
+	if len(os.Args) > 1 && os.Args[1] == "bom" {
+		// Remove "bom" from args and run BOM extractor
+		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+		bomMain()
+	} else {
+		// Run the original DXF parser CLI
+		runCLI()
+	}
 }
