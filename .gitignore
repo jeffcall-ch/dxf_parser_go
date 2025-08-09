@@ -11,6 +11,11 @@
 # Test binary, built with `go test -c`
 *.test
 
+# comp files
+*.dxf
+*.xls
+*.xlsx
+
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
