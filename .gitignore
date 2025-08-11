@@ -15,6 +15,7 @@
 *.dxf
 *.xls
 *.xlsx
+*.csv
 
 # Code coverage profiles and other test artifacts
 *.out
