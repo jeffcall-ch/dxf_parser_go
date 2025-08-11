@@ -30,52 +30,110 @@ func extractTable(textEntities []TextEntity, tableTitle string) ([]string, [][]s
 	const maxCols = 20
 	const maxRows = 100
 
-	// Find title
-	var titleEntity *TextEntity
-	var startX, titleY *float64
-
+	// Step 1: Find ALL table locations to determine pages
+	var allTableYCoords []float64
+	var allTableXCoords []float64
+	
 	for i := range textEntities {
 		entity := &textEntities[i]
 		if strings.Contains(strings.ToLower(entity.Content), strings.ToLower(tableTitle)) {
-			startX = &entity.X
-			titleY = &entity.Y
-			titleEntity = entity
+			allTableYCoords = append(allTableYCoords, entity.Y)
+			allTableXCoords = append(allTableXCoords, entity.X)
 			debugPrint(fmt.Sprintf("[DEBUG] Table title '%s' found at X=%f, Y=%f, text='%s'", tableTitle, entity.X, entity.Y, entity.Content))
-			break
 		}
 	}
 
-	if titleEntity == nil || startX == nil {
+	if len(allTableYCoords) == 0 {
 		debugPrint(fmt.Sprintf("[DEBUG] Table title '%s' not found.", tableTitle))
 		return []string{}, [][]string{}
 	}
 
-	// Filter entities based on table type and position
-	filteredEntities := []TextEntity{}
-	minX := *startX
+	// Step 2: Sort table Y coordinates (highest to lowest - top to bottom)
+	type tableLocation struct {
+		Y float64
+		X float64
+	}
+	
+	var tableLocations []tableLocation
+	for i := range allTableYCoords {
+		tableLocations = append(tableLocations, tableLocation{Y: allTableYCoords[i], X: allTableXCoords[i]})
+	}
+	
+	sort.Slice(tableLocations, func(i, j int) bool {
+		return tableLocations[i].Y > tableLocations[j].Y // Descending Y (top to bottom)
+	})
 
-	if strings.ToLower(tableTitle) == "cut pipe length" {
-		// Allow data to the left of the title for cut pipe length table
-		minX = *startX - 50
+	debugPrint(fmt.Sprintf("[DEBUG] Found %d '%s' tables, processing %d pages", len(tableLocations), tableTitle, len(tableLocations)))
+
+	// Step 3: Process each page and combine results
+	var allHeaders []string
+	var allDataRows [][]string
+	
+	for pageNum, tableLocation := range tableLocations {
+		debugPrint(fmt.Sprintf("[DEBUG] Processing page %d/%d at Y=%f", pageNum+1, len(tableLocations), tableLocation.Y))
+		
+		// Define page boundaries
+		pageStartY := tableLocation.Y
+		var pageEndY *float64
+		if pageNum < len(tableLocations)-1 {
+			nextY := tableLocations[pageNum+1].Y
+			pageEndY = &nextY
+		}
+		
+		// Create page-specific entity bucket
+		var pageEntities []TextEntity
+		minX := tableLocation.X
+		
+		if strings.ToLower(tableTitle) == "cut pipe length" {
+			// Allow data to the left of the title for cut pipe length table
+			minX = tableLocation.X - 50
+		}
+		
+		for _, entity := range textEntities {
+			// Include entity if it's within this page's Y range and X range
+			if entity.Y <= pageStartY { // At or below page start
+				if pageEndY == nil || entity.Y > *pageEndY { // Above next page (or last page)
+					if entity.X >= minX {
+						pageEntities = append(pageEntities, entity)
+					}
+				}
+			}
+		}
+		
+		debugPrint(fmt.Sprintf("[DEBUG] Page %d has %d entities", pageNum+1, len(pageEntities)))
+		
+		// Process this page using existing extraction logic
+		pageHeaders, pageRows := extractTableFromPageEntities(pageEntities, tableTitle, tableLocation.Y, tableLocation.X)
+		
+		// For the first page, use its headers
+		if pageNum == 0 {
+			allHeaders = pageHeaders
+		}
+		
+		// Add all page data rows
+		allDataRows = append(allDataRows, pageRows...)
+		
+		debugPrint(fmt.Sprintf("[DEBUG] Page %d contributed %d data rows", pageNum+1, len(pageRows)))
 	}
 
-	for _, entity := range textEntities {
-		if entity.Y >= *titleY { // Skip rows at or above title
-			continue
-		}
-		if entity.X >= minX {
-			filteredEntities = append(filteredEntities, entity)
-		}
-	}
+	debugPrint(fmt.Sprintf("[DEBUG] Total combined rows from all pages: %d", len(allDataRows)))
+	
+	return allHeaders, allDataRows
+}
 
+// extractTableFromPageEntities processes entities from a single page using the original extraction logic
+func extractTableFromPageEntities(pageEntities []TextEntity, tableTitle string, titleY, titleX float64) ([]string, [][]string) {
 	// Group entities by Y coordinate (rows)
 	rowsDict := make(map[float64][]TableCell)
-	for _, entity := range filteredEntities {
-		yKey := math.Round(entity.Y*10) / 10 // Round to 1 decimal place
-		if _, exists := rowsDict[yKey]; !exists {
-			rowsDict[yKey] = []TableCell{}
+	for _, entity := range pageEntities {
+		// Only include entities below the table title
+		if entity.Y < titleY {
+			yKey := math.Round(entity.Y*10) / 10 // Round to 1 decimal place
+			if _, exists := rowsDict[yKey]; !exists {
+				rowsDict[yKey] = []TableCell{}
+			}
+			rowsDict[yKey] = append(rowsDict[yKey], TableCell{X: entity.X, Text: entity.Content})
 		}
-		rowsDict[yKey] = append(rowsDict[yKey], TableCell{X: entity.X, Text: entity.Content})
 	}
 
 	// Sort rows by Y coordinate (descending - top to bottom)
