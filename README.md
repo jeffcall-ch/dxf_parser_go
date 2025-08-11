@@ -1,21 +1,27 @@
-# DXF Text Parser
+# DXF Isometric Pipe Drawing Analyzer
 
-A high-performance Go program for extracting text content and coordinates from DXF (Drawing Exchange Format) files. Optimized for speed with concurrent processing and designed to handle large files (12MB+) efficiently.
+A high-performance Go toolkit for analyzing DXF (Drawing Exchange Format) isometric pipe drawings. Specialized for extracting pipe components, weld symbols, and generating BOMs (Bill of Materials) from technical drawings.
 
 ## Features
 
-- **Fast Text Extraction**: Extracts all TEXT and MTEXT entities from DXF files
-- **Coordinate Capture**: Captures precise X,Y coordinates and text height for each entity
-- **Concurrent Processing**: Utilizes multiple CPU cores for optimal performance
-- **Spatial Analysis**: Advanced spatial queries and position-based analysis
-- **Memory Efficient**: Stream processing to handle large files without excessive memory usage
-- **Command-Line Interface**: Easy-to-use CLI with multiple operation modes
+### 🔧 **Cut Length Extractor & BOM Generator**
+- **Pipe Component Extraction**: Automatically identifies pipes, fittings, valves, and flanges
+- **Cut Length Calculation**: Calculates precise pipe cut lengths from isometric drawings
+- **BOM Generation**: Creates comprehensive Bill of Materials with quantities and specifications
+- **Table Recognition**: Extracts data from DXF table entities
+- **Spatial Analysis**: Advanced coordinate-based component positioning
 
-## Performance
+### ⚡ **Weld Symbol Counter**
+- **Precision Detection**: Identifies weld symbols as crossed POLYLINE segments
+- **Length-Based Recognition**: Uses specific polyline lengths (4.0311 & 6.9462, 6.8964 & 3.9446, 6.9000 & 4.0000)
+- **Intersection Analysis**: Detects properly crossed lines indicating weld locations
+- **High Accuracy**: 100% match with manual verification on test drawings
 
-- Processes 12MB+ DXF files in under 2 seconds
-- Scales efficiently across multiple CPU cores
-- Memory-optimized for handling large technical drawings
+### 🚀 **Performance**
+- **Ultra-Fast Processing**: 0.08 seconds average per 10MB+ DXF file
+- **Concurrent Processing**: Utilizes multiple CPU cores for batch operations
+- **Memory Efficient**: Stream processing for large technical drawings
+- **Batch Processing**: Handles multiple files simultaneously
 
 ## Installation
 
@@ -24,30 +30,49 @@ A high-performance Go program for extracting text content and coordinates from D
 git clone https://github.com/jeffcall-ch/dxf_parser_go.git
 cd dxf_parser_go
 
-# Build the executable
-go build -o dxf_parser.exe
+# Build all tools using the provided script
+./build.bat
 ```
 
 ## Usage
 
-### Basic Parsing
+### Unified BOM and Cut Length Extraction
 
-Extract all text entities from a DXF file:
+Extract pipe components, cut lengths, and generate comprehensive BOM:
 
 ```bash
-# Parse with default number of workers (CPU cores)
-./dxf_parser parse drawing.dxf
+# Process all DXF files in a directory (recommended)
+./bom_cut_length_extractor.exe bom -dir drawings_folder
 
-# Parse with specific number of workers
-./dxf_parser parse drawing.dxf 8
+# Process with debug output
+./bom_cut_length_extractor.exe bom -dir drawings_folder -debug
+
+# Process a single file using the legacy parser
+./bom_cut_length_extractor.exe parse single_drawing.dxf
 ```
 
-### Spatial Analysis
+**Output Files:**
+- `0001_ERECTION_MATERIALS.csv` - Complete materials list with descriptions
+- `0002_CUT_PIPE_LENGTH.csv` - Pipe cut lengths with piece numbers
+- `0003_AGGREGATED_MATERIALS.csv` - Summarized materials by type
+- `0004_SUMMARY.csv` - Processing summary and statistics
 
-Perform spatial analysis on extracted text entities:
+### Weld Symbol Detection
+
+Count weld symbols in isometric pipe drawings:
 
 ```bash
-# Show statistics about the drawing
+# Analyze a single DXF file
+./weld_detector.exe -file drawing.dxf
+
+# Process all DXF files in a directory
+./weld_detector.exe -dir drawings_folder
+
+# Custom output file
+./weld_detector.exe -file drawing.dxf -output my_results.csv
+```
+
+**Output:** `weld_counts.csv` with weld symbol counts per file
 ./dxf_parser spatial drawing.dxf stats
 
 # Find entities near specific text

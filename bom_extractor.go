@@ -2,57 +2,11 @@ package main
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
-
-// Global debug flag
-var debugMode = false
-
-// Compiled regex patterns for performance
-var (
-	pieceNumberPattern = regexp.MustCompile(`^<\d+>$`)
-	numberPattern      = regexp.MustCompile(`^\d+(\.\d+)?$`)
-	kksPattern         = regexp.MustCompile(`\b\d[A-Z]{3}\d{2}BR\d{3}\b`)
-	pipeClassPattern   = regexp.MustCompile(`\b[A-Z]{4}\b`)
-)
-
-// DXFResult represents the extracted data from a single DXF file
-type DXFResult struct {
-	DrawingNo      string      `json:"drawing_no"`
-	PipeClass      string      `json:"pipe_class"`
-	MatHeader      []string    `json:"mat_header"`
-	MatRows        [][]string  `json:"mat_rows"`
-	CutHeader      []string    `json:"cut_header"`
-	CutRows        [][]string  `json:"cut_rows"`
-	Error          string      `json:"error"`
-	ProcessingTime float64     `json:"processing_time"`
-	Filename       string      `json:"filename"`
-	FilePath       string      `json:"file_path"`
-}
-
-// SummaryRow for the summary CSV output
-type SummaryRow struct {
-	FilePath       string  `json:"file_path"`
-	Filename       string  `json:"filename"`
-	DrawingNo      string  `json:"drawing_no"`
-	PipeClass      string  `json:"pipe_class"`
-	MatRows        int     `json:"mat_rows"`
-	CutRows        int     `json:"cut_rows"`
-	MatMissing     bool    `json:"mat_missing"`
-	CutMissing     bool    `json:"cut_missing"`
-	Error          string  `json:"error"`
-	ProcessingTime float64 `json:"processing_time"`
-}
-
-func debugPrint(message string) {
-	if debugMode {
-		fmt.Println(message)
-	}
-}
 
 func isPieceNumber(text string) bool {
 	return pieceNumberPattern.MatchString(strings.TrimSpace(text))
