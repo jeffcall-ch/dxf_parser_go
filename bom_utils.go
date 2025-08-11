@@ -66,6 +66,11 @@ func writeOutputFiles(directory string, materialRows, cutRows [][]string, summar
 			return fmt.Errorf("error writing materials CSV: %v", err)
 		}
 		fmt.Printf("Wrote ERECTION MATERIALS data to: %s (%d rows)\n", matFilename, len(materialRows))
+		
+		// Post-process to fix missing N.S. columns
+		if err := fixMissingNSColumns(matFilename); err != nil {
+			return fmt.Errorf("error fixing missing N.S. columns: %v", err)
+		}
 	}
 
 	// Write CUT PIPE LENGTH CSV
@@ -390,6 +395,128 @@ func sortItemsByCategory(items []*AggregatedItem) {
 		// Then sort by description
 		return items[i].Description < items[j].Description
 	})
+}
+
+// fixMissingNSColumns post-processes the ERECTION MATERIALS CSV to fix missing N.S. columns
+// and clean QTY values by removing "M" suffixes.
+// It looks for rows where PT NO has a value but WEIGHT is empty, indicating missing N.S. column
+func fixMissingNSColumns(filename string) error {
+	// Read the CSV file
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.LazyQuotes = true
+	reader.TrimLeadingSpace = true
+
+	records, err := reader.ReadAll()
+	if err != nil {
+		return err
+	}
+
+	if len(records) == 0 {
+		return nil // Nothing to process
+	}
+
+	header := records[0]
+	rows := records[1:]
+	
+	// Find column indices
+	ptNoIdx := -1
+	nsIdx := -1
+	qtyIdx := -1
+	weightIdx := -1
+	
+	for i, col := range header {
+		switch strings.TrimSpace(col) {
+		case "PT NO":
+			ptNoIdx = i
+		case "N.S.":
+			nsIdx = i
+		case "QTY":
+			qtyIdx = i
+		case "WEIGHT":
+			weightIdx = i
+		}
+	}
+	
+	if ptNoIdx == -1 || nsIdx == -1 || qtyIdx == -1 || weightIdx == -1 {
+		debugPrint("[DEBUG] Could not find required columns for N.S. correction")
+		return nil // Can't process without proper column structure
+	}
+	
+	correctedRows := [][]string{}
+	correctionCount := 0
+	
+	for _, row := range rows {
+		// Ensure row has enough columns
+		for len(row) <= weightIdx {
+			row = append(row, "")
+		}
+		
+		// Check if this is a component row (PT NO has value) AND WEIGHT is empty
+		ptNo := strings.TrimSpace(row[ptNoIdx])
+		weight := strings.TrimSpace(row[weightIdx])
+		
+		if ptNo != "" && weight == "" {
+			// This row has missing N.S. column - shift columns right
+			debugPrint(fmt.Sprintf("[DEBUG] Fixing missing N.S. column for PT NO '%s'", ptNo))
+			
+			newRow := make([]string, len(row))
+			copy(newRow, row)
+			
+			// Shift: N.S. → QTY, QTY → WEIGHT, leave N.S. empty
+			newRow[weightIdx] = row[qtyIdx] // Move QTY to WEIGHT
+			newRow[qtyIdx] = row[nsIdx]     // Move N.S. to QTY
+			newRow[nsIdx] = ""              // Clear N.S. (it was missing)
+			
+			correctedRows = append(correctedRows, newRow)
+			correctionCount++
+		} else {
+			// No correction needed
+			correctedRows = append(correctedRows, row)
+		}
+	}
+	
+	// Clean QTY column - remove "M" suffixes and ensure numeric values
+	qtyCleanCount := 0
+	for i, row := range correctedRows {
+		if len(row) > qtyIdx {
+			qty := strings.TrimSpace(row[qtyIdx])
+			if qty != "" {
+				// Remove "M" suffix if present
+				if strings.HasSuffix(strings.ToUpper(qty), "M") {
+					cleanQty := strings.TrimSuffix(strings.ToUpper(qty), "M")
+					cleanQty = strings.TrimSpace(cleanQty)
+					if cleanQty != qty {
+						debugPrint(fmt.Sprintf("[DEBUG] Cleaning QTY: '%s' → '%s'", qty, cleanQty))
+						correctedRows[i][qtyIdx] = cleanQty
+						qtyCleanCount++
+					}
+				}
+			}
+		}
+	}
+	
+	if correctionCount > 0 || qtyCleanCount > 0 {
+		if correctionCount > 0 {
+			debugPrint(fmt.Sprintf("[DEBUG] Fixed %d rows with missing N.S. columns", correctionCount))
+		}
+		if qtyCleanCount > 0 {
+			debugPrint(fmt.Sprintf("[DEBUG] Cleaned %d QTY values (removed 'M' suffixes)", qtyCleanCount))
+		}
+		
+		// Write back the corrected CSV
+		allRecords := [][]string{header}
+		allRecords = append(allRecords, correctedRows...)
+		
+		return writeCSV(filename, header, correctedRows)
+	}
+	
+	return nil // No corrections needed
 }
 
 

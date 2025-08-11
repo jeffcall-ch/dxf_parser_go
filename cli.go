@@ -26,6 +26,8 @@ func runCLI() {
 		handleSpatialCommand()
 	case "benchmark":
 		handleBenchmarkCommand()
+	case "bom":
+		bomMain()
 	case "help":
 		printUsage()
 	default:
@@ -41,6 +43,7 @@ func printUsage() {
 	fmt.Println("  dxf_parser parse <file.dxf> [workers]     - Parse DXF file and show results")
 	fmt.Println("  dxf_parser spatial <file.dxf> [command]  - Run spatial analysis")
 	fmt.Println("  dxf_parser benchmark <file.dxf>          - Run performance benchmarks")
+	fmt.Println("  dxf_parser bom -dir <directory> [options] - Extract BOM and cut lengths")
 	fmt.Println("  dxf_parser help                          - Show this help message")
 	fmt.Println("\nSpatial Commands:")
 	fmt.Println("  stats                                    - Show entity statistics")

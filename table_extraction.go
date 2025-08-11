@@ -4,8 +4,15 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+// isNumber checks if a string represents a numeric value
+func isNumber(text string) bool {
+	_, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+	return err == nil
+}
 
 // TableRow represents a row of data with Y coordinate for sorting
 type TableRow struct {
@@ -360,7 +367,81 @@ func processErectionMaterialsTable(dataRows [][]string) [][]string {
 			newRow := make([]string, len(row))
 			copy(newRow, row)
 
-			// Remove "M" from pipe length cells (QTY column - typically column D)
+			// Detect and fix missing N.S. column issue (conservative approach)
+			// Expected structure: PT_NO | DESCRIPTION | N.S. | QTY | WEIGHT | CATEGORY
+			//                    [0]   | [1]         | [2]  | [3] | [4]    | [5]
+			
+			// Only attempt correction if we have exactly 5 columns (missing one column)
+			// and the row appears to be a component row (not a category header)
+			if len(newRow) == 5 && newRow[0] != "" && newRow[1] != "" {
+				
+				// Working backwards from the structure:
+				// newRow[4] should be WEIGHT (always present - number or "---")
+				// newRow[3] should be QTY (always present)
+				// newRow[2] should be N.S. (sometimes missing)
+				
+				col2 := strings.TrimSpace(newRow[2]) // What should be N.S.
+				col4 := strings.TrimSpace(newRow[4]) // What should be WEIGHT
+				
+				// Check if col4 looks like a valid WEIGHT value
+				isCol4ValidWeight := false
+				if col4 == "---" || col4 == "" {
+					isCol4ValidWeight = true
+				} else if val, err := strconv.ParseFloat(col4, 64); err == nil && val >= 0 {
+					isCol4ValidWeight = true
+				}
+				
+				// If col4 is valid weight, check if col2 looks like it contains QTY data
+				// instead of N.S. data (indicating missing N.S. column)
+				if isCol4ValidWeight {
+					// N.S. values are typically: empty, numbers like "25", or "number x number" format like "25 x 15"
+					// QTY values are typically: decimal numbers, numbers with "M" suffix, small integers
+					
+					isCol2LikelyQty := false
+					
+					// Check if col2 looks like QTY (pipe length with M suffix)
+					if strings.HasSuffix(col2, "M") {
+						isCol2LikelyQty = true
+					}
+					
+					// Check if col2 is a small integer that's likely QTY, not N.S.
+					// N.S. (nominal size) is typically 15, 25, 50, etc. (pipe sizes)
+					// QTY can be small numbers like 1, 2, 3, etc.
+					if val, err := strconv.ParseFloat(col2, 64); err == nil {
+						// If it's a small number (< 10) and doesn't look like a standard pipe size
+						if val > 0 && val < 10 && val != 15 && val != 25 && val != 50 && val != 80 && val != 100 {
+							// This is likely a QTY, not N.S.
+							isCol2LikelyQty = true
+						}
+					}
+					
+					// Check if col2 contains decimal values which are more likely QTY than N.S.
+					if strings.Contains(col2, ".") {
+						if val, err := strconv.ParseFloat(col2, 64); err == nil && val > 0 {
+							isCol2LikelyQty = true
+						}
+					}
+					
+					// Only apply fix if we're confident this is a missing N.S. case
+					if isCol2LikelyQty {
+						debugPrint(fmt.Sprintf("[DEBUG] Detected missing N.S. column in row: %v (Category: %s)", newRow, currentCategory))
+						
+						// Shift data right to insert missing N.S. column
+						correctedRow := make([]string, 6)
+						correctedRow[0] = newRow[0] // PT_NO
+						correctedRow[1] = newRow[1] // DESCRIPTION  
+						correctedRow[2] = ""        // N.S. (missing, leave empty)
+						correctedRow[3] = newRow[2] // QTY (was in N.S. position)
+						correctedRow[4] = newRow[3] // WEIGHT (was in QTY position) 
+						correctedRow[5] = newRow[4] // Keep any additional data
+						
+						newRow = correctedRow
+						debugPrint(fmt.Sprintf("[DEBUG] Corrected row: %v", newRow))
+					}
+				}
+			}
+
+			// Remove "M" from pipe length cells (QTY column - now correctly in column D)
 			if len(newRow) > 3 && newRow[3] != "" {
 				// Remove "M" suffix from quantity values like "2.4M" -> "2.4"
 				newRow[3] = strings.TrimSuffix(newRow[3], "M")

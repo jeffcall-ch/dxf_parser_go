@@ -3,18 +3,12 @@ package main
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
 
 func isPieceNumber(text string) bool {
 	return pieceNumberPattern.MatchString(strings.TrimSpace(text))
-}
-
-func isNumber(text string) bool {
-	_, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
-	return err == nil
 }
 
 func isTextRemark(text string) bool {
