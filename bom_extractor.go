@@ -339,21 +339,24 @@ func extractPipeDescriptions(matRows [][]string) []string {
 
 func convertCutLengthToSingleRowFormat(header []string, rows [][]string, drawingNo, pipeClass string, pipeDescriptions []string) ([]string, [][]string) {
 	if len(rows) == 0 {
-		return []string{"PIECE NO", "CUT LENGTH", "N.S. (MM)", "REMARKS", "PIPE DESCRIPTION", "Drawing-No.", "Pipe Class"}, [][]string{}
+		return []string{"PIECE NO", "CUT LENGTH", "N.S. (MM)", "REMARKS", "PIPE DESCRIPTION", "MULTIPLE PIPE DESCRIPTIONS", "Drawing-No.", "Pipe Class"}, [][]string{}
 	}
 
 	// Determine pipe description to use
 	pipeDesc := ""
+	multipleDesc := "NO"
 	if len(pipeDescriptions) == 0 {
 		pipeDesc = "No pipe description found"
 	} else if len(pipeDescriptions) == 1 {
 		pipeDesc = pipeDescriptions[0]
 	} else {
-		pipeDesc = "Multiple pipe descriptions - not sure which applies"
+		// Join all pipe descriptions with " | " separator
+		pipeDesc = strings.Join(pipeDescriptions, " | ")
+		multipleDesc = "YES"
 	}
 
-	// New header format with pipe description
-	newHeader := []string{"PIECE NO", "CUT LENGTH", "N.S. (MM)", "REMARKS", "PIPE DESCRIPTION", "Drawing-No.", "Pipe Class"}
+	// New header format with pipe description and multiple flag
+	newHeader := []string{"PIECE NO", "CUT LENGTH", "N.S. (MM)", "REMARKS", "PIPE DESCRIPTION", "MULTIPLE PIPE DESCRIPTIONS", "Drawing-No.", "Pipe Class"}
 	newRows := [][]string{}
 
 	for _, row := range rows {
@@ -378,7 +381,7 @@ func convertCutLengthToSingleRowFormat(header []string, rows [][]string, drawing
 			}
 
 			if piece1No != "" { // Only add if piece number exists
-				newRows = append(newRows, []string{piece1No, piece1Length, piece1NS, piece1Remarks, pipeDesc, drawingNo, pipeClass})
+				newRows = append(newRows, []string{piece1No, piece1Length, piece1NS, piece1Remarks, pipeDesc, multipleDesc, drawingNo, pipeClass})
 			}
 		}
 
@@ -403,7 +406,7 @@ func convertCutLengthToSingleRowFormat(header []string, rows [][]string, drawing
 			}
 
 			if piece2No != "" { // Only add if piece number exists
-				newRows = append(newRows, []string{piece2No, piece2Length, piece2NS, piece2Remarks, pipeDesc, drawingNo, pipeClass})
+				newRows = append(newRows, []string{piece2No, piece2Length, piece2NS, piece2Remarks, pipeDesc, multipleDesc, drawingNo, pipeClass})
 			}
 		}
 	}

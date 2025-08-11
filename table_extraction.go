@@ -230,6 +230,10 @@ func extractTableFromPageEntities(pageEntities []TextEntity, tableTitle string, 
 
 	// Process based on table type
 	if strings.Contains(strings.ToUpper(tableTitle), "ERECTION MATERIALS") {
+		// FIRST: Merge multi-line rows before processing categories
+		dataRows = mergeMultiLineRows(dataRows)
+		debugPrint(fmt.Sprintf("[DEBUG] After multi-line merging: %d rows", len(dataRows)))
+		
 		dataRows = processErectionMaterialsTable(dataRows)
 		// Update header to include the new CATEGORY column
 		if len(header) > 0 {
@@ -518,6 +522,100 @@ func processErectionMaterialsTable(dataRows [][]string) [][]string {
 	}
 
 	return processedRows
+}
+
+// mergeMultiLineRows merges wrapped text lines back into single BOM rows
+func mergeMultiLineRows(dataRows [][]string) [][]string {
+	if len(dataRows) == 0 {
+		return dataRows
+	}
+
+	mergedRows := [][]string{}
+	
+	for _, row := range dataRows {
+		if len(row) == 0 {
+			continue
+		}
+		
+		// Check if this row starts with a PT NO (number)
+		// If it does, it's a legitimate new BOM row
+		// If it doesn't, it might be a continuation of the previous row
+		isNewBOMRow := false
+		
+		if len(row) > 0 && row[0] != "" {
+			// Check if first column contains a number (PT NO)
+			if _, err := strconv.Atoi(strings.TrimSpace(row[0])); err == nil {
+				isNewBOMRow = true
+			}
+		}
+		
+		if isNewBOMRow || len(mergedRows) == 0 {
+			// This is a new BOM row, add it as-is
+			mergedRows = append(mergedRows, row)
+			debugPrint(fmt.Sprintf("[DEBUG] New BOM row %d: %v", len(mergedRows), row))
+		} else {
+			// This might be a continuation row - check if it looks like wrapped text
+			// Continuation rows typically have text but are missing PT NO, N.S., QTY, WEIGHT
+			isContinuationRow := false
+			
+			// Check if this row has text content (in any column) but no numeric PT NO
+			hasTextContent := false
+			for _, cell := range row {
+				if strings.TrimSpace(cell) != "" {
+					hasTextContent = true
+					break
+				}
+			}
+			
+			if hasTextContent {
+				// This row has text but no PT NO, likely a continuation
+				// Check if it looks like descriptive text (not numbers/measurements)
+				firstCell := strings.TrimSpace(row[0])
+				
+				// If the first cell contains text that looks like part of a description
+				// (no PT NO number, and contains words that suggest continuation)
+				if firstCell != "" {
+					// Check for continuation patterns like "equal)", "or equivalent", etc.
+					continuationPatterns := []string{"equal)", "or equal", "316L", "Stainless", "steel"}
+					for _, pattern := range continuationPatterns {
+						if strings.Contains(strings.ToLower(firstCell), strings.ToLower(pattern)) {
+							isContinuationRow = true
+							break
+						}
+					}
+				}
+			}
+			
+			if isContinuationRow && len(mergedRows) > 0 {
+				// Merge this row's text with the previous row's description
+				lastRowIdx := len(mergedRows) - 1
+				lastRow := mergedRows[lastRowIdx]
+				
+				// Find the continuation text (could be in any column)
+				continuationText := ""
+				for _, cell := range row {
+					if strings.TrimSpace(cell) != "" {
+						continuationText = strings.TrimSpace(cell)
+						break
+					}
+				}
+				
+				if len(lastRow) > 1 && continuationText != "" {
+					// Append continuation text to previous row's description
+					mergedRows[lastRowIdx][1] = strings.TrimSpace(lastRow[1] + " " + continuationText)
+					debugPrint(fmt.Sprintf("[DEBUG] Merged continuation text: '%s' + '%s' = '%s'", 
+						lastRow[1], continuationText, mergedRows[lastRowIdx][1]))
+				}
+			} else {
+				// Not a continuation row, treat as new row
+				mergedRows = append(mergedRows, row)
+				debugPrint(fmt.Sprintf("[DEBUG] Non-continuation row %d: %v", len(mergedRows), row))
+			}
+		}
+	}
+	
+	debugPrint(fmt.Sprintf("[DEBUG] Multi-line merging: %d rows -> %d rows", len(dataRows), len(mergedRows)))
+	return mergedRows
 }
 
 
