@@ -535,8 +535,18 @@ func main() {
 		os.Exit(1)
 	}
 	
+	// Determine output path - place CSV in the same directory where we started processing
+	var outputPath string
+	if directory != "" {
+		// Directory mode: place output in the specified directory
+		outputPath = filepath.Join(directory, output)
+	} else {
+		// Single file mode: place output in the directory containing the file
+		outputPath = filepath.Join(filepath.Dir(filePath), output)
+	}
+	
 	// Write results
-	if err := writeResults(output, results); err != nil {
+	if err := writeResults(outputPath, results); err != nil {
 		fmt.Printf("Error writing results: %v\n", err)
 		os.Exit(1)
 	}
@@ -564,6 +574,6 @@ func main() {
 		fmt.Printf("Average Welds per File: %.1f\n", float64(totalWelds)/float64(successCount))
 	}
 	fmt.Printf("Processing Time: %.2f seconds\n", elapsed.Seconds())
-	fmt.Printf("Output File: %s\n", output)
+	fmt.Printf("Output File: %s\n", outputPath)
 	fmt.Printf("============================================================\n")
 }
