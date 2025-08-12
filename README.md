@@ -11,10 +11,13 @@ A high-performance Go toolkit for analyzing DXF (Drawing Exchange Format) isomet
 - **Table Recognition**: Extracts data from DXF table entities
 - **Spatial Analysis**: Advanced coordinate-based component positioning
 
-### ⚡ **Weld Symbol Counter**
+### ⚡ **Weld Symbol Detection & Integration**
+- **Integrated Workflow**: Weld detection combined with BOM extraction in single command
 - **Precision Detection**: Identifies weld symbols as crossed POLYLINE segments
 - **Length-Based Recognition**: Uses specific polyline lengths (4.0311 & 6.9462, 6.8964 & 3.9446, 6.9000 & 4.0000)
 - **Intersection Analysis**: Detects properly crossed lines indicating weld locations
+- **Enhanced CSV Output**: Enriched with pipe information from BOM data
+- **Performance Caching**: Reuses parsed DXF data for both BOM and weld analysis
 - **High Accuracy**: 100% match with manual verification on test drawings
 
 ### 🚀 **Performance**
@@ -22,6 +25,46 @@ A high-performance Go toolkit for analyzing DXF (Drawing Exchange Format) isomet
 - **Concurrent Processing**: Utilizes multiple CPU cores for batch operations
 - **Memory Efficient**: Stream processing for large technical drawings
 - **Batch Processing**: Handles multiple files simultaneously
+
+## Quick Start Guide
+
+### For New Users
+
+1. **Download and Build**:
+   ```bash
+   git clone https://github.com/jeffcall-ch/dxf_parser_go.git
+   cd dxf_parser_go
+   go build -o bom_cut_length_extractor.exe .
+   ```
+
+2. **Basic BOM Extraction**:
+   ```bash
+   # Extract BOM from all DXF files in a folder
+   ./bom_cut_length_extractor.exe bom -dir "path/to/dxf/files"
+   ```
+
+3. **Enhanced Analysis with Weld Detection**:
+   ```bash
+   # Get BOM + detailed weld analysis
+   ./bom_cut_length_extractor.exe bom -dir "path/to/dxf/files" -weld
+   ```
+
+### Output Files Explained
+
+| File | Description | Key Columns |
+|------|-------------|-------------|
+| `0001_ERECTION_MATERIALS.csv` | Complete materials list | Item, Description, Quantity, Unit |
+| `0002_CUT_PIPE_LENGTH.csv` | Pipe cutting information | PieceNumber, Length, Diameter |
+| `0003_AGGREGATED_MATERIALS.csv` | Summary by material type | Category, TotalQuantity |
+| `0004_SUMMARY.csv` | Processing statistics | FileName, ProcessingTime, Status |
+| `0005_WELD_COUNTS.csv` | Enhanced weld analysis | WeldCount, PipeNS, PipeDescription, MultiplePipeNS |
+
+### Performance Tips
+
+- **Multi-file processing**: Always use directory mode for better performance
+- **Worker optimization**: System auto-detects optimal worker count
+- **Debug mode**: Use `-debug` flag to troubleshoot specific files
+- **Memory usage**: For very large batches, process in smaller chunks
 
 ## Installation
 
@@ -47,32 +90,55 @@ Extract pipe components, cut lengths, and generate comprehensive BOM:
 # Process with debug output
 ./bom_cut_length_extractor.exe bom -dir drawings_folder -debug
 
-# Process a single file using the legacy parser
+# Process with custom worker count
+./bom_cut_length_extractor.exe bom -dir drawings_folder -workers 8
+
+# Process with integrated weld detection (NEW!)
+./bom_cut_length_extractor.exe bom -dir drawings_folder -weld
+
+# Process with weld detection and debug output
+./bom_cut_length_extractor.exe bom -dir drawings_folder -weld -debug
+
+# Legacy single file parsing
 ./bom_cut_length_extractor.exe parse single_drawing.dxf
 ```
 
-**Output Files:**
+**Standard Output Files:**
 - `0001_ERECTION_MATERIALS.csv` - Complete materials list with descriptions
 - `0002_CUT_PIPE_LENGTH.csv` - Pipe cut lengths with piece numbers
 - `0003_AGGREGATED_MATERIALS.csv` - Summarized materials by type
 - `0004_SUMMARY.csv` - Processing summary and statistics
+
+**Weld Detection Output (when using -weld flag):**
+- `0005_WELD_COUNTS.csv` - Enhanced weld analysis with pipe information
 
 ### Weld Symbol Detection
 
 Count weld symbols in isometric pipe drawings:
 
 ```bash
-# Analyze a single DXF file
-./weld_detector.exe -file drawing.dxf
+# Integrated with BOM extractor (RECOMMENDED)
+./bom_cut_length_extractor.exe bom -dir drawings_folder -weld
 
-# Process all DXF files in a directory
+# Standalone weld detection
+./weld_detector.exe -file drawing.dxf
 ./weld_detector.exe -dir drawings_folder
 
 # Custom output file
 ./weld_detector.exe -file drawing.dxf -output my_results.csv
 ```
 
-**Output:** `weld_counts.csv` with weld symbol counts per file
+**Enhanced Weld Output (0005_WELD_COUNTS.csv) includes:**
+- **FilePath**: Full path to processed DXF file
+- **FileName**: Base filename without extension
+- **DrawingNo**: Extracted drawing number (KKS code)
+- **PipeClass**: Pipe classification from BOM data
+- **PipeNS**: Sorted, comma-separated pipe nominal sizes (e.g., "15, 25")
+- **PipeDescription**: Full pipe descriptions from BOM data
+- **MultiplePipeNS**: "Yes" when multiple pipe sizes detected, empty otherwise
+- **WeldCount**: Number of weld symbols detected
+- **ProcessingTime**: Time taken to process the file
+- **Error**: Any processing errors encountered
 ./dxf_parser spatial drawing.dxf stats
 
 # Find entities near specific text
@@ -224,6 +290,34 @@ go test -bench=.
 go test -cover
 ```
 
+## Enhanced Weld Analysis Output
+
+The integrated weld detection system produces a comprehensive CSV file (`0005_WELD_COUNTS.csv`) with enriched pipe information extracted from BOM data:
+
+### Sample Output
+
+```csv
+FilePath,FileName,DrawingNo,PipeClass,PipeNS,PipeDescription,MultiplePipeNS,WeldCount,ProcessingTime,Error
+drawings/TB020-INOV-2HTX67BR910_1.0.dxf,,2HTX67BR910,AHDX,"25, 40","Pipe sml. ASME-B36.19M, 1"", Sch-10S A312-TP316L, Pipe sml. ASME-B36.19M, 1-1/2"", Sch-10S A312-TP316L",Yes,12,0.204,
+```
+
+### Column Descriptions
+
+- **PipeNS**: Sorted, comma-separated pipe nominal sizes found in the drawing
+- **PipeDescription**: Complete pipe descriptions from BOM data  
+- **MultiplePipeNS**: "Yes" indicates multiple pipe sizes (useful for complex drawings)
+- **WeldCount**: Precise count of weld symbols using geometric detection
+- **DrawingNo**: Automatically extracted KKS/drawing number
+- **PipeClass**: Pipe classification system identifier
+
+### Integration Benefits
+
+✅ **Single Command**: BOM extraction + weld detection in one operation  
+✅ **Data Correlation**: Weld counts linked to specific pipe information  
+✅ **Performance**: ~2x faster than running tools separately  
+✅ **Enhanced Analysis**: Identify drawings with multiple pipe sizes  
+✅ **Quality Control**: Cross-reference weld counts with pipe complexity
+
 ## Performance Benchmarks
 
 Tested on sample piping isometric drawings (~10.7MB each):
@@ -346,6 +440,13 @@ The extractor automatically identifies:
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Documentation
+
+- **[README.md](README.md)** - Main user documentation and usage guide
+- **[TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md)** - Comprehensive technical documentation for developers
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference for common commands and use cases
+- **[MULTI_TABLE_DETECTION.md](MULTI_TABLE_DETECTION.md)** - Multi-table processing documentation
 
 ## License
 

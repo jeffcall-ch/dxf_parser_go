@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -51,13 +52,16 @@ type FileCache struct {
 
 // WeldResult represents the result of weld detection for a single file
 type WeldResult struct {
-	FilePath       string  `json:"file_path"`
-	FileName       string  `json:"file_name"`
-	DrawingNo      string  `json:"drawing_no"`
-	PipeClass      string  `json:"pipe_class"`
-	WeldCount      int     `json:"weld_count"`
-	ProcessingTime float64 `json:"processing_time"`
-	Error          string  `json:"error"`
+	FilePath           string  `json:"file_path"`
+	FileName           string  `json:"file_name"`
+	DrawingNo          string  `json:"drawing_no"`
+	PipeClass          string  `json:"pipe_class"`
+	PipeNS             string  `json:"pipe_ns"`
+	PipeDescription    string  `json:"pipe_description"`
+	MultiplePipeNS     string  `json:"multiple_pipe_ns"`
+	WeldCount          int     `json:"weld_count"`
+	ProcessingTime     float64 `json:"processing_time"`
+	Error              string  `json:"error"`
 }
 
 // WorkerContext holds per-worker cache and results
@@ -131,6 +135,184 @@ func cleanupFileCache(cache map[string]FileCache) {
 	}
 }
 
+// extractPipeInfoFromEntities extracts pipe N.S., descriptions, and multiple pipes flag
+func extractPipeInfoFromEntities(textEntities []TextEntity) (string, string, string) {
+	// Look for BOM data that contains pipe information
+	matHeader, matRows := extractTable(textEntities, "ERECTION MATERIALS")
+	
+	if len(matRows) == 0 {
+		return "", "", ""
+	}
+	
+	// Find N.S. and Description column indices
+	nsIndex := -1
+	descIndex := -1
+	
+	for i, header := range matHeader {
+		if strings.Contains(strings.ToUpper(header), "N.S.") {
+			nsIndex = i
+		}
+		if strings.Contains(strings.ToUpper(header), "DESCRIPTION") || 
+		   strings.Contains(strings.ToUpper(header), "COMPONENT") {
+			descIndex = i
+		}
+	}
+	
+	if nsIndex == -1 || descIndex == -1 {
+		return "", "", ""
+	}
+	
+	// Extract pipe rows data
+	var pipeRows []map[string]string
+	nsSet := make(map[string]bool)
+	descSet := make(map[string]bool)
+	
+	for _, row := range matRows {
+		if len(row) > nsIndex && len(row) > descIndex {
+			description := strings.TrimSpace(row[descIndex])
+			
+			// Check if this row is a pipe row (contains "Pipe" in description)
+			if strings.Contains(strings.ToUpper(description), "PIPE") {
+				ns := strings.TrimSpace(row[nsIndex])
+				if ns != "" && !strings.Contains(ns, "N.S.") {
+					// Store pipe row info
+					pipeRows = append(pipeRows, map[string]string{
+						"ns":   ns,
+						"desc": description,
+					})
+					
+					// Handle multi-size NS like "40 x 25" - split and add both
+					parts := strings.Split(ns, "x")
+					for _, part := range parts {
+						cleanNS := strings.TrimSpace(part)
+						if cleanNS != "" {
+							nsSet[cleanNS] = true
+						}
+					}
+					
+					// Add description
+					if description != "" {
+						descSet[description] = true
+					}
+				}
+			}
+		}
+	}
+	
+	// Convert NS to sorted slice
+	var nsValues []string
+	for ns := range nsSet {
+		nsValues = append(nsValues, ns)
+	}
+	sort.Slice(nsValues, func(i, j int) bool {
+		// Try to sort numerically if possible
+		numI, errI := strconv.Atoi(nsValues[i])
+		numJ, errJ := strconv.Atoi(nsValues[j])
+		if errI == nil && errJ == nil {
+			return numI < numJ
+		}
+		// Fall back to string comparison
+		return nsValues[i] < nsValues[j]
+	})
+	
+	// Convert descriptions to sorted slice
+	var descValues []string
+	for desc := range descSet {
+		descValues = append(descValues, desc)
+	}
+	sort.Strings(descValues)
+	
+	// Determine multiple pipes flag
+	multiplePipes := ""
+	if len(pipeRows) > 1 {
+		multiplePipes = "Yes"
+	}
+	
+	// Join results
+	pipeNS := strings.Join(nsValues, ", ")
+	pipeDescription := strings.Join(descValues, ", ")
+	
+	return pipeNS, pipeDescription, multiplePipes
+}
+
+// extractPipeNSFromEntities extracts unique pipe N.S. values from text entities
+func extractPipeNSFromEntities(textEntities []TextEntity) string {
+	// Look for BOM data that contains pipe information
+	matHeader, matRows := extractTable(textEntities, "ERECTION MATERIALS")
+	
+	if len(matRows) == 0 {
+		return ""
+	}
+	
+	// Find N.S. column index
+	nsIndex := -1
+	for i, header := range matHeader {
+		if strings.Contains(strings.ToUpper(header), "N.S.") {
+			nsIndex = i
+			break
+		}
+	}
+	
+	if nsIndex == -1 {
+		return ""
+	}
+	
+	// Extract unique N.S. values from pipe rows
+	nsSet := make(map[string]bool)
+	
+	for _, row := range matRows {
+		if len(row) > nsIndex {
+			// Check if this row is a pipe row (contains "Pipe" in description)
+			descIndex := -1
+			for i, header := range matHeader {
+				if strings.Contains(strings.ToUpper(header), "DESCRIPTION") || 
+				   strings.Contains(strings.ToUpper(header), "COMPONENT") {
+					descIndex = i
+					break
+				}
+			}
+			
+			if descIndex != -1 && len(row) > descIndex {
+				description := strings.ToUpper(row[descIndex])
+				if strings.Contains(description, "PIPE") {
+					ns := strings.TrimSpace(row[nsIndex])
+					if ns != "" && !strings.Contains(ns, "N.S.") {
+						// Handle multi-size NS like "40 x 25" - split and add both
+						parts := strings.Split(ns, "x")
+						for _, part := range parts {
+							cleanNS := strings.TrimSpace(part)
+							if cleanNS != "" {
+								nsSet[cleanNS] = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Convert to sorted slice
+	var nsValues []string
+	for ns := range nsSet {
+		nsValues = append(nsValues, ns)
+	}
+	
+	// Sort the values
+	sort.Slice(nsValues, func(i, j int) bool {
+		// Try to sort numerically if possible
+		numI, errI := strconv.Atoi(nsValues[i])
+		numJ, errJ := strconv.Atoi(nsValues[j])
+		if errI == nil && errJ == nil {
+			return numI < numJ
+		}
+		// Fall back to string comparison
+		return nsValues[i] < nsValues[j]
+	})
+	
+	// Join with commas
+	return strings.Join(nsValues, ", ")
+}
+
 // processWeldDetection processes cached files for weld detection
 func processWeldDetection(fileCache map[string]FileCache) []WeldResult {
 	var results []WeldResult
@@ -145,6 +327,9 @@ func processWeldDetection(fileCache map[string]FileCache) []WeldResult {
 		// Extract drawing number and pipe class from cached text entities
 		result.DrawingNo = findDrawingNoFromEntities(cache.TextEntities)
 		result.PipeClass = findPipeClassFromEntities(cache.TextEntities)
+		
+		// Extract pipe information (NS, Description, Multiple flag)
+		result.PipeNS, result.PipeDescription, result.MultiplePipeNS = extractPipeInfoFromEntities(cache.TextEntities)
 		
 		// Process weld detection safely with error capture
 		if weldCount, err := extractWeldsFromRawContent(cache.RawContent); err != nil {
@@ -580,7 +765,7 @@ func writeWeldCountsCSV(filename string, results []WeldResult) error {
 
 	// Write header
 	header := []string{
-		"FilePath", "FileName", "DrawingNo", "PipeClass", 
+		"FilePath", "FileName", "DrawingNo", "PipeClass", "PipeNS", "PipeDescription", "MultiplePipeNS",
 		"WeldCount", "ProcessingTime", "Error",
 	}
 	if err := writer.Write(header); err != nil {
@@ -594,6 +779,9 @@ func writeWeldCountsCSV(filename string, results []WeldResult) error {
 			result.FileName,
 			result.DrawingNo,
 			result.PipeClass,
+			result.PipeNS,
+			result.PipeDescription,
+			result.MultiplePipeNS,
 			strconv.Itoa(result.WeldCount),
 			fmt.Sprintf("%.3f", result.ProcessingTime),
 			result.Error,
