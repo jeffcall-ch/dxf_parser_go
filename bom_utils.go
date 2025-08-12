@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Global debug flag
@@ -517,6 +518,152 @@ func fixMissingNSColumns(filename string) error {
 	}
 	
 	return nil // No corrections needed
+}
+
+// Process a single DXF file with optional caching for weld detection
+func processDXFFileWithCaching(filepath string, weldFlag bool) (DXFResult, *FileCache) {
+	start := time.Now()
+	result := DXFResult{
+		Filename: filepath,
+		FilePath: filepath,
+	}
+	
+	var cache *FileCache
+	if weldFlag {
+		cache = &FileCache{}
+		// Read raw content for weld detection
+		if rawContent, err := os.ReadFile(filepath); err == nil {
+			cache.RawContent = rawContent
+		}
+	}
+
+	debugPrint(fmt.Sprintf("[DEBUG] Opening DXF file: %s", filepath))
+
+	// Use our existing Go DXF parser
+	parser := NewDXFParser(1) // Use single worker for individual file processing
+	textEntities, err := parser.ParseFile(filepath)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to parse DXF file: %v", err)
+		result.ProcessingTime = time.Since(start).Seconds()
+		return result, cache
+	}
+	
+	// Cache text entities for weld detection if needed
+	if weldFlag {
+		cache.TextEntities = textEntities
+		cache.DrawingNo = findDrawingNo(textEntities)
+		cache.PipeClass = findPipeClass(textEntities)
+	}
+
+	drawingNo := findDrawingNo(textEntities)
+	pipeClass := findPipeClass(textEntities)
+
+	matHeader, matRows := extractTable(textEntities, "ERECTION MATERIALS")
+	cutHeader, cutRows := extractTable(textEntities, "CUT PIPE LENGTH")
+
+	// Add Drawing-No. and Pipe Class to each row
+	if len(matRows) > 0 {
+		result.MatHeader = append(matHeader, "Drawing-No.", "Pipe Class")
+		result.MatRows = make([][]string, len(matRows))
+		for i, row := range matRows {
+			result.MatRows[i] = append(row, drawingNo, pipeClass)
+		}
+	}
+
+	if len(cutRows) > 0 {
+		// Extract pipe descriptions from material table for cut length table
+		pipeDescriptions := extractPipeDescriptions(matRows)
+		
+		// Convert to single-row format with pipe descriptions
+		result.CutHeader, result.CutRows = convertCutLengthToSingleRowFormat(cutHeader, cutRows, drawingNo, pipeClass, pipeDescriptions)
+	}
+
+	result.DrawingNo = drawingNo
+	result.PipeClass = pipeClass
+	result.ProcessingTime = time.Since(start).Seconds()
+
+	debugPrint(fmt.Sprintf("[DEBUG] Extracted %d material rows and %d cut length rows from %s", len(result.MatRows), len(result.CutRows), filepath))
+	debugPrint(fmt.Sprintf("[DEBUG] Drawing No: '%s', Pipe Class: '%s'", drawingNo, pipeClass))
+
+	return result, cache
+}
+
+// Process files sequentially with optional caching for weld detection
+func processFilesSequentialWithCaching(files []string, debug bool, weldFlag bool) ([]DXFResult, map[string]FileCache) {
+	results := make([]DXFResult, 0, len(files))
+	var fileCache map[string]FileCache
+	
+	if weldFlag {
+		fileCache = make(map[string]FileCache)
+	}
+	
+	for i, filePath := range files {
+		if debug {
+			fmt.Printf("[%d/%d] Processing: %s\n", i+1, len(files), filepath.Base(filePath))
+		} else {
+			fmt.Printf("Processing file %d/%d: %s\n", i+1, len(files), filepath.Base(filePath))
+		}
+		
+		result, cache := processDXFFileWithCaching(filePath, weldFlag)
+		results = append(results, result)
+		
+		if weldFlag && cache != nil {
+			fileCache[filePath] = *cache
+		}
+	}
+	
+	return results, fileCache
+}
+
+// Process files in parallel with optional caching for weld detection
+func processFilesParallelWithCaching(files []string, workers int, debug bool, weldFlag bool) ([]DXFResult, map[string]FileCache) {
+	jobs := make(chan string, len(files))
+	type resultWithCache struct {
+		result DXFResult
+		cache  *FileCache
+	}
+	results := make(chan resultWithCache, len(files))
+	
+	// Start workers
+	for w := 0; w < workers; w++ {
+		go func() {
+			for filePath := range jobs {
+				result, cache := processDXFFileWithCaching(filePath, weldFlag)
+				results <- resultWithCache{result: result, cache: cache}
+			}
+		}()
+	}
+	
+	// Send jobs
+	for _, filePath := range files {
+		jobs <- filePath
+	}
+	close(jobs)
+	
+	// Collect results
+	var allResults []DXFResult
+	var fileCache map[string]FileCache
+	
+	if weldFlag {
+		fileCache = make(map[string]FileCache)
+	}
+	
+	for i := 0; i < len(files); i++ {
+		resultWithCache := <-results
+		allResults = append(allResults, resultWithCache.result)
+		
+		if weldFlag && resultWithCache.cache != nil {
+			fileCache[resultWithCache.result.FilePath] = *resultWithCache.cache
+		}
+		
+		if debug {
+			fmt.Printf("[%d/%d] Completed: %s\n", i+1, len(files), filepath.Base(resultWithCache.result.FilePath))
+		} else {
+			fmt.Printf("Completed file %d/%d: %s\n", i+1, len(files), filepath.Base(resultWithCache.result.FilePath))
+		}
+	}
+	
+	return allResults, fileCache
 }
 
 
